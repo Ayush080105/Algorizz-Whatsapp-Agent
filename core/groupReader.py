@@ -121,7 +121,3 @@ def update_csv(csv_path):
 
     print("\n✅ CSV replaced with only today's messages!")
 
-
-# --------------------- Main ---------------------
-if __name__ == "__main__":
-    update_csv("group_convo.csv")

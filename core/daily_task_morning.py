@@ -1,4 +1,4 @@
-import time, csv
+import csv, time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -43,12 +43,11 @@ def send_message(driver, message):
     message_box.send_keys(Keys.ENTER)
     time.sleep(1)
 
-# ------------------ Main ------------------
-if __name__ == "__main__":
+# ------------------ Main Task ------------------
+def send_morning_message():
     driver = launch_driver()
     wait_for_whatsapp(driver)
 
-    # Load groups from CSV
     with open("group_convo.csv", "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         groups = [row['groupName'] for row in reader]
