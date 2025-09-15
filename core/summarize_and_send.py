@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 import time
 import requests
 from selenium import webdriver
@@ -7,10 +8,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 # ------------------ Config ------------------
-AZURE_OPENAI_ENDPOINT = "https://qrizz-us.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview"
-AZURE_API_KEY = "b46942d9305c42d78df6078a465419ae"
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_API_KEY = os.getenv("AZURE_API_KEY")
 HEADERS = {
     "Content-Type": "application/json",
     "api-key": AZURE_API_KEY
