@@ -19,17 +19,28 @@ os.makedirs(PROFILE_PATH, exist_ok=True)  # ensure folder exists
 
 # --------------------- Launch WhatsApp ---------------------
 def launch_driver():
-   
-
     options = webdriver.ChromeOptions()
-    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # use project-local profile
 
-    # ✅ webdriver-manager handles downloading & path automatically
+    # Use project-local profile
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")
+
+    # Headless & Linux-safe flags
+    options.add_argument("--headless")  # run without GUI
+    options.add_argument("--no-sandbox")  # required for EC2
+    options.add_argument("--disable-dev-shm-usage")  # avoid /dev/shm errors
+    options.add_argument("--disable-gpu")  # optional
+    options.add_argument("--remote-debugging-port=9222")  # avoid DevToolsActivePort errors
+
+    # Explicit Chrome binary path (adjust if installed elsewhere)
+    options.binary_location = "/usr/bin/google-chrome"
+
+    # Use webdriver-manager for ChromeDriver
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
 
     driver.get("https://web.whatsapp.com")
     return driver
+
 def wait_for_page_load(driver):
     print("Waiting for WhatsApp Web to load...")
     WebDriverWait(driver, 60).until(
