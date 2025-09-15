@@ -38,7 +38,7 @@ def launch_driver():
 
     # Headless + Linux-safe flags (only on Linux)
     if platform.system() != "Windows":
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
