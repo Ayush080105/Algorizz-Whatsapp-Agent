@@ -4,6 +4,7 @@ import time
 import os
 import platform
 import shutil
+import tempfile
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -23,7 +24,7 @@ def log(msg):
     print(f"{timestamp} {msg}")
 
 # --------------------- Launch WhatsApp ---------------------
-def launch_driver(retries=3, wait_time=5, use_profile=False):
+def launch_driver(retries=3, wait_time=5, use_temp_profile=True):
     last_exception = None
 
     for attempt in range(1, retries + 1):
@@ -42,14 +43,16 @@ def launch_driver(retries=3, wait_time=5, use_profile=False):
                 options.add_argument("--disable-extensions")
                 options.add_argument("--disable-background-networking")
 
-            # User profile
-            if use_profile:
+            # User profile (temporary for each session)
+            if use_temp_profile:
+                temp_profile = tempfile.mkdtemp(prefix="whatsapp_")
+                options.add_argument(f"user-data-dir={temp_profile}")
+                log(f"✅ Using temporary profile directory: {temp_profile}")
+            else:
                 profile_dir = os.path.join(BASE_DIR, "whatsapp_profile")
                 os.makedirs(profile_dir, exist_ok=True)
                 options.add_argument(f"user-data-dir={profile_dir}")
-                log(f"✅ Using profile directory: {profile_dir}")
-            else:
-                log("⚠️ Launching without user profile (fresh session).")
+                log(f"✅ Using persistent profile directory: {profile_dir}")
 
             # Chrome binary detection
             chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
@@ -61,6 +64,9 @@ def launch_driver(retries=3, wait_time=5, use_profile=False):
                 log(f"✅ Using default Windows Chrome path: {options.binary_location}")
             else:
                 raise Exception("❌ No Chrome/Chromium binary found!")
+
+            # Kill existing Chrome processes (optional)
+            os.system("pkill -f chrome" if platform.system() != "Windows" else "taskkill /f /im chrome.exe")
 
             # Launch driver
             service = Service(ChromeDriverManager().install())

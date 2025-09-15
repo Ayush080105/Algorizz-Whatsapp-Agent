@@ -95,8 +95,9 @@ def send_evening_messages(csv_path="group_convo.csv"):
     with open(csv_path, mode="r", newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
 
-    log("🚀 Launching WhatsApp Web...")
-    driver = groupReader.launch_driver()
+    log("🚀 Launching WhatsApp Web with temporary profile...")
+    # Use temporary profile to avoid session conflicts
+    driver = groupReader.launch_driver(use_temp_profile=True)
     groupReader.wait_for_page_load(driver)
 
     for row in rows:
@@ -104,17 +105,17 @@ def send_evening_messages(csv_path="group_convo.csv"):
         try:
             conversation = json.loads(row["Conversation"]) if row["Conversation"].strip() else []
         except json.JSONDecodeError:
-            log(f" JSON decode failed for group {group_name}, skipping conversation.")
+            log(f"❌ JSON decode failed for group {group_name}, skipping conversation.")
             conversation = []
 
         evening_msgs = generate_evening_updates_llm(conversation, group_name)
         if evening_msgs:
             send_evening_message(driver, group_name, evening_msgs)
         else:
-            log(f" No evening messages generated for {group_name}")
+            log(f"ℹ️ No evening messages generated for {group_name}")
 
     driver.quit()
-    log(" Finished sending evening messages to all groups.")
+    log("✅ Finished sending evening messages to all groups.")
 
 # --------------------- Run ---------------------
 if __name__ == "__main__":

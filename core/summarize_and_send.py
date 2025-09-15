@@ -3,7 +3,6 @@ import json
 import os
 import time
 import requests
-import tempfile
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -65,8 +64,8 @@ def summarize_conversations_and_send(csv_path="group_convo.csv"):
     with open(csv_path, "r", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    log("🚀 Launching WhatsApp Web...")
-    driver = groupReader.launch_driver()
+    log("🚀 Launching WhatsApp Web with temporary profile...")
+    driver = groupReader.launch_driver(use_temp_profile=True)
     groupReader.wait_for_page_load(driver)
 
     for row in rows:

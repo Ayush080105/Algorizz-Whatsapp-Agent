@@ -7,7 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # Import your existing driver loader
-from groupReader import launch_driver  # <- use this instead of redefining
+import groupReader  # use launch_driver and helpers from here
 
 # ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,26 +22,10 @@ def log(msg):
 # ------------------ WhatsApp Helpers ------------------
 def wait_for_whatsapp(driver):
     log("Waiting for WhatsApp Web to load...")
-    WebDriverWait(driver, 60).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
-    )
-    log("✅ WhatsApp Web loaded.")
+    groupReader.wait_for_page_load(driver)
 
 def search_and_open_group(driver, group_name):
-    log(f"🔍 Searching for group: {group_name}")
-    driver.execute_script("window.scrollTo(0, 0);")
-    search_box = WebDriverWait(driver, 20).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
-    )
-    search_box.click()
-    time.sleep(0.5)
-    search_box.send_keys(Keys.CONTROL + "a")
-    search_box.send_keys(Keys.BACKSPACE)
-    time.sleep(0.5)
-    search_box.send_keys(group_name)
-    time.sleep(2)
-    search_box.send_keys(Keys.ENTER)
-    time.sleep(2)
+    groupReader.search_and_open_group(driver, group_name)
 
 def send_message(driver, message):
     log(f"✉️ Sending message: {message[:50]}{'...' if len(message)>50 else ''}")
@@ -54,11 +38,12 @@ def send_message(driver, message):
     time.sleep(1)
 
 # ------------------ Main Task ------------------
-def send_morning_message():
-    driver = launch_driver()  # <-- reuse from groupReader.py
+def send_morning_message(csv_path=CSV_PATH):
+    log("🚀 Launching WhatsApp Web with temporary profile...")
+    driver = groupReader.launch_driver(use_temp_profile=True)  # temporary profile to avoid conflicts
     wait_for_whatsapp(driver)
 
-    with open(CSV_PATH, "r", encoding="utf-8") as f:
+    with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         groups = [row['groupName'] for row in reader]
 
@@ -74,5 +59,6 @@ def send_morning_message():
     driver.quit()
     log("✅ Morning messages sent to all groups!")
 
+# ------------------ Run ------------------
 if __name__ == "__main__":
     send_morning_message()
