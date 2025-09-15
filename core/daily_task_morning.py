@@ -26,7 +26,6 @@ def wait_for_whatsapp(driver):
     groupReader.wait_for_page_load(driver)
 
 def search_and_open_group(driver, group_name):
-    # Use the improved version that maintains group visibility
     try:
         log(f"🔍 Searching for group: {group_name}")
         
@@ -95,24 +94,13 @@ def send_message(driver, message):
         
         # Send the message
         message_box.send_keys(Keys.ENTER)
-        time.sleep(3)  # Wait a bit longer to ensure message is sent
+        time.sleep(2)  # Shorter wait after send
         
         log("✅ Message sent successfully")
         
     except Exception as e:
         log(f"❌ Failed to send message: {e}")
-        # Try alternative approach if the first one fails
-        try:
-            message_box = driver.find_element(By.XPATH, '//div[@contenteditable="true"][@data-tab]')
-            message_box.click()
-            message_box.clear()
-            message_box.send_keys(message)
-            message_box.send_keys(Keys.ENTER)
-            time.sleep(2)
-            log("✅ Message sent successfully (alternative method)")
-        except Exception as e2:
-            log(f"❌ Alternative method also failed: {e2}")
-            raise
+        raise
 
 # ------------------ Main Task ------------------
 def send_morning_message(csv_path=CSV_PATH):
@@ -125,17 +113,17 @@ def send_morning_message(csv_path=CSV_PATH):
     temp_profile = None
     
     try:
-        # Launch the driver
-        driver, temp_profile = groupReader.launch_driver(headless=False)  # Use visible browser for sending messages
+        # Force visible browser
+        driver, temp_profile = groupReader.launch_driver(headless=False)
         
         # Wait for WhatsApp to load
         wait_for_whatsapp(driver)
         
-        # Wait for user to scan QR code if needed
-        log("Please scan the QR code if needed, then press Enter to continue...")
+        # Ask user to scan QR code if needed
+        log("📱 Please scan the QR code if it appears, then press Enter to continue...")
         input()
         
-        # Additional wait to ensure WhatsApp is fully loaded
+        # Extra wait
         time.sleep(5)
         
         # Read groups from CSV
@@ -151,27 +139,26 @@ def send_morning_message(csv_path=CSV_PATH):
             try:
                 log(f"📋 Processing group {i}/{len(groups)}: {group}")
                 search_and_open_group(driver, group)
-                time.sleep(3)  # Wait for group to fully load
                 send_message(driver, morning_message)
                 success_count += 1
-                time.sleep(3)  # Pause between groups
+                time.sleep(2)  # Pause between groups
                 
             except Exception as e:
                 log(f"❌ Failed to send message to group {group}: {e}")
-                # Continue with next group even if one fails
                 continue
 
         log(f"✅ Morning messages sent to {success_count}/{len(groups)} groups successfully!")
+
+        log("✅ Task complete. Browser will stay open — close it manually when done.")
+        input("Press Enter to close the browser...")
 
     except Exception as e:
         log(f"❌ Fatal error in send_morning_message: {e}")
     
     finally:
-        # Clean up
         if driver:
             driver.quit()
         groupReader.cleanup_chrome_processes()
-        # Clean up temp profile if needed
         if temp_profile and os.path.exists(temp_profile):
             try:
                 shutil.rmtree(temp_profile, ignore_errors=True)
