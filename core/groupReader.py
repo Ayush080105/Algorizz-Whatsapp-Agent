@@ -4,6 +4,7 @@ import time
 import os
 import platform
 import shutil
+import tempfile
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -15,44 +16,48 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # --------------------- Paths ---------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")
-os.makedirs(PROFILE_PATH, exist_ok=True)  # create if missing
+CSV_PATH = os.path.join(BASE_DIR, "group_convo.csv")
 
 # --------------------- Launch WhatsApp ---------------------
 def launch_driver(retries=3, wait_time=5):
-    options = webdriver.ChromeOptions()
-    options.add_argument(f"user-data-dir={PROFILE_PATH}")
-
-    # Linux-safe / headless flags
-    if platform.system() != "Windows":
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("--disable-software-rasterizer")
-
-    # Auto-detect Chrome/Chromium binary
-    chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
-    if chrome_path:
-        options.binary_location = chrome_path
-    elif platform.system() == "Windows":
-        options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-    else:
-        raise Exception("No Chrome/Chromium binary found. Install it on this machine.")
-
-    service = Service(ChromeDriverManager().install())
     last_exception = None
 
     for attempt in range(1, retries + 1):
         try:
+            options = webdriver.ChromeOptions()
+
+            # Use a unique temporary profile folder per session (avoids profile-in-use errors)
+            profile_dir = tempfile.mkdtemp(prefix="whatsapp_profile_")
+            options.add_argument(f"user-data-dir={profile_dir}")
+
+            # Linux-safe headless flags
+            if platform.system() != "Windows":
+                options.add_argument("--headless=new")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--remote-debugging-port=9222")
+                options.add_argument("--disable-software-rasterizer")
+
+            # Auto-detect Chrome/Chromium binary
+            chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
+            if chrome_path:
+                options.binary_location = chrome_path
+            elif platform.system() == "Windows":
+                options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+            else:
+                raise Exception("No Chrome/Chromium binary found. Install it on this machine.")
+
+            service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
             driver.get("https://web.whatsapp.com")
             return driver
+
         except Exception as e:
             last_exception = e
             print(f"⚠️ Launch attempt {attempt} failed: {e}")
             time.sleep(wait_time)
+
     raise Exception(f"Failed to launch Chrome after {retries} attempts. Last error: {last_exception}")
 
 # --------------------- Wait for WhatsApp ---------------------
