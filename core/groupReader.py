@@ -26,7 +26,7 @@ def log(msg):
 # --------------------- Launch WhatsApp ---------------------
 def launch_driver(retries=3, wait_time=5, use_temp_profile=True):
     last_exception = None
-
+    os.system("pkill -f chrome")
     for attempt in range(1, retries + 1):
         try:
             log(f"🔹 Launch attempt {attempt}...")
