@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime
+import tempfile
 
 # ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,21 +23,22 @@ def log(msg):
 
 # ------------------ Driver Loader ------------------
 def launch_driver():
-    """Force Chrome to always open visibly with a fresh profile"""
-    log("🚀 Launching Chrome (forced visible mode)")
+    """Always launch Chrome visibly with a fresh temp profile (QR needed each run)."""
+    log("🚀 Launching Chrome (fresh profile, visible mode)")
+
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
 
-    # Use a temp profile so login persists during run
-    temp_profile = os.path.join(BASE_DIR, "temp_chrome_profile")
-    os.makedirs(temp_profile, exist_ok=True)
+    # create a unique temp profile directory every run
+    temp_profile = tempfile.mkdtemp(prefix="whatsapp_profile_")
     chrome_options.add_argument(f"--user-data-dir={temp_profile}")
 
-    service = Service()  # Assumes chromedriver is in PATH
+    service = Service()  # assumes chromedriver is in PATH
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get("https://web.whatsapp.com")
+
     return driver, temp_profile
 
 # ------------------ WhatsApp Helpers ------------------
