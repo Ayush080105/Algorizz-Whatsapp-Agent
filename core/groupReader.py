@@ -3,7 +3,6 @@ import json
 import time
 import os
 import platform
-import shutil
 import tempfile
 import subprocess
 from datetime import datetime
@@ -19,31 +18,33 @@ from webdriver_manager.chrome import ChromeDriverManager
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "group_convo.csv")
 
-# --------------------- Logging helper ---------------------
+# --------------------- Logging ---------------------
 def log(msg):
     timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
     print(f"{timestamp} {msg}")
 
 # --------------------- Launch WhatsApp ---------------------
-def launch_driver(retries=3, wait_time=5):
+def launch_driver(retries=3, wait_time=5, headless=True):
     last_exception = None
 
     for attempt in range(1, retries + 1):
         try:
-            print(f"[INFO] Launch attempt {attempt}...")
+            log(f"[INFO] Launch attempt {attempt}...")
 
-            # Kill any leftover Chrome processes
+            # Kill leftover Chrome processes
             subprocess.run("pkill -f chrome", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             options = webdriver.ChromeOptions()
 
-            # Headless & Linux flags
-            if platform.system() != "Windows":
+            # Linux / EC2 safe flags
+            if platform.system() != "Windows" and headless:
                 options.add_argument("--headless=new")
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
                 options.add_argument("--disable-gpu")
-                options.add_argument("--remote-debugging-port=9222")
+                options.add_argument("--disable-software-rasterizer")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-background-networking")
 
             # Always use unique temp profile
             temp_profile = tempfile.mkdtemp(prefix="whatsapp_")
@@ -51,12 +52,12 @@ def launch_driver(retries=3, wait_time=5):
 
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
             driver.get("https://web.whatsapp.com")
-            print("[INFO] Chrome launched successfully!")
+            log("[INFO] Chrome launched successfully!")
             return driver
 
         except Exception as e:
             last_exception = e
-            print(f"[WARN] Launch attempt {attempt} failed: {e}")
+            log(f"[WARN] Launch attempt {attempt} failed: {e}")
             time.sleep(wait_time)
 
     raise Exception(f"🚨 Failed to launch Chrome after {retries} attempts. Last error: {last_exception}")
