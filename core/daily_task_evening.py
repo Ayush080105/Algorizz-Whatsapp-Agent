@@ -1,16 +1,26 @@
-import csv, json, time, requests
+import csv
+import json
+import time
+import os
+import requests
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import groupReader
-import os
 from dotenv import load_dotenv
-load_dotenv(override=True)
 
+# --------------------- Load Environment ---------------------
+load_dotenv(override=True)
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY")
-HEADERS = {"Content-Type": "application/json","api-key": AZURE_API_KEY}
+HEADERS = {"Content-Type": "application/json", "api-key": AZURE_API_KEY}
+
+# --------------------- Logging ---------------------
+from datetime import datetime
+def log(msg):
+    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    print(f"{timestamp} {msg}")
 
 # --------------------- Use Azure LLM ---------------------
 def generate_evening_updates_llm(conversation, group_name):
@@ -48,19 +58,20 @@ Rules:
     }
 
     try:
-        response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=body)
+        response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=body, timeout=30)
         response.raise_for_status()
         raw_reply = response.json()["choices"][0]["message"]["content"].strip()
         return [line for line in raw_reply.split("\n") if line.strip()]
     except Exception as e:
-        print(f"❌ LLM generation failed: {e}")
+        log(f"❌ LLM generation failed for group {group_name}: {e}")
         return []
 
-# --------------------- Send Evening Message ---------------------
+# --------------------- Send Evening Messages ---------------------
 def send_evening_message(driver, group_name, messages):
     try:
         groupReader.search_and_open_group(driver, group_name)
         time.sleep(2)
+
         for msg in messages:
             input_box = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located(
@@ -68,22 +79,23 @@ def send_evening_message(driver, group_name, messages):
                 )
             )
             input_box.click()
-            input_box.send_keys(Keys.CONTROL, 'a')
-            input_box.send_keys(Keys.BACKSPACE)
             input_box.send_keys(msg)
             input_box.send_keys(Keys.ENTER)
             time.sleep(1)
-        print(f"✅ Evening messages sent to {group_name}")
+
+        log(f"✅ Evening messages sent to {group_name}")
     except Exception as e:
-        print(f"❌ Failed to send evening message: {e}")
+        log(f"❌ Failed to send evening messages to {group_name}: {e}")
 
 # --------------------- Main Wrapper ---------------------
 def send_evening_messages(csv_path="group_convo.csv"):
+    log("📌 Updating CSV with today's messages...")
     groupReader.update_csv(csv_path)
 
     with open(csv_path, mode="r", newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
 
+    log("🚀 Launching WhatsApp Web...")
     driver = groupReader.launch_driver()
     groupReader.wait_for_page_load(driver)
 
@@ -92,10 +104,18 @@ def send_evening_messages(csv_path="group_convo.csv"):
         try:
             conversation = json.loads(row["Conversation"]) if row["Conversation"].strip() else []
         except json.JSONDecodeError:
+            log(f" JSON decode failed for group {group_name}, skipping conversation.")
             conversation = []
 
         evening_msgs = generate_evening_updates_llm(conversation, group_name)
         if evening_msgs:
             send_evening_message(driver, group_name, evening_msgs)
+        else:
+            log(f" No evening messages generated for {group_name}")
 
     driver.quit()
+    log(" Finished sending evening messages to all groups.")
+
+# --------------------- Run ---------------------
+if __name__ == "__main__":
+    send_evening_messages()

@@ -1,31 +1,35 @@
-import csv, time, os
-from selenium import webdriver
+import csv
+import time
+import os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# ------------------ Paths ------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # current script folder
-PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")  # store profile in project
+# Import your existing driver loader
+from groupReader import launch_driver  # <- use this instead of redefining
 
-# Ensure the folder exists
-os.makedirs(PROFILE_PATH, exist_ok=True)
+# ------------------ Paths ------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_DIR, "group_convo.csv")
+
+# ------------------ Logging ------------------
+from datetime import datetime
+def log(msg):
+    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    print(f"{timestamp} {msg}")
 
 # ------------------ WhatsApp Helpers ------------------
-def launch_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # store session here
-    driver = webdriver.Chrome(options=options)
-    driver.get("https://web.whatsapp.com")
-    return driver
-
 def wait_for_whatsapp(driver):
+    log("Waiting for WhatsApp Web to load...")
     WebDriverWait(driver, 60).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
     )
+    log("✅ WhatsApp Web loaded.")
 
 def search_and_open_group(driver, group_name):
+    log(f"🔍 Searching for group: {group_name}")
+    driver.execute_script("window.scrollTo(0, 0);")
     search_box = WebDriverWait(driver, 20).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
     )
@@ -40,6 +44,7 @@ def search_and_open_group(driver, group_name):
     time.sleep(2)
 
 def send_message(driver, message):
+    log(f"✉️ Sending message: {message[:50]}{'...' if len(message)>50 else ''}")
     message_box = WebDriverWait(driver, 20).until(
         EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
     )
@@ -50,21 +55,24 @@ def send_message(driver, message):
 
 # ------------------ Main Task ------------------
 def send_morning_message():
-    driver = launch_driver()
+    driver = launch_driver()  # <-- reuse from groupReader.py
     wait_for_whatsapp(driver)
 
-    with open("group_convo.csv", "r", encoding="utf-8") as f:
+    with open(CSV_PATH, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         groups = [row['groupName'] for row in reader]
 
     morning_message = "Good morning team! Please reply with what you plan to do today for your tasks."
 
     for group in groups:
-        search_and_open_group(driver, group)
-        send_message(driver, morning_message)
+        try:
+            search_and_open_group(driver, group)
+            send_message(driver, morning_message)
+        except Exception as e:
+            log(f"❌ Failed to send message to group {group}: {e}")
 
     driver.quit()
-
+    log("✅ Morning messages sent to all groups!")
 
 if __name__ == "__main__":
     send_morning_message()
