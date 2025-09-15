@@ -3,7 +3,6 @@ import time
 import os
 import shutil
 import uuid
-import tempfile
 from datetime import datetime
 
 from selenium import webdriver
@@ -20,6 +19,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "group_convo.csv")
 
+# Local profiles folder (no /tmp → avoids permission issues)
+PROFILE_BASE = os.path.join(BASE_DIR, "profiles")
+os.makedirs(PROFILE_BASE, exist_ok=True)
+
 
 # ------------------ Logging ------------------
 def log(msg):
@@ -29,7 +32,7 @@ def log(msg):
 
 # ------------------ Driver Helpers ------------------
 def launch_driver():
-    """Launch Chrome with a guaranteed unique profile each run."""
+    """Launch Chrome with a guaranteed unique profile each run (stored in ./profiles)."""
     log("🚀 Launching Chrome with fresh unique profile...")
 
     chrome_options = Options()
@@ -37,8 +40,8 @@ def launch_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
 
-    # Unique user data dir (prevents conflicts)
-    temp_profile = os.path.join(tempfile.gettempdir(), f"whatsapp_profile_{uuid.uuid4().hex}")
+    # Use safe local folder instead of /tmp
+    temp_profile = os.path.join(PROFILE_BASE, f"whatsapp_profile_{uuid.uuid4().hex}")
     chrome_options.add_argument(f"--user-data-dir={temp_profile}")
 
     service = Service(ChromeDriverManager().install())
@@ -99,14 +102,6 @@ def search_and_open_group(driver, group_name):
         )
         group_element.click()
         time.sleep(3)
-
-        # Clear search again
-        search_box.click()
-        time.sleep(1)
-        search_box.send_keys(Keys.CONTROL + 'a')
-        time.sleep(0.5)
-        search_box.send_keys(Keys.BACKSPACE)
-        time.sleep(2)
 
     except Exception as e:
         log(f"❌ Failed to find group {group_name}: {e}")
