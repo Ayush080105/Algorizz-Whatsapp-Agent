@@ -22,6 +22,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}      # Private key stored in GitHub secrets
           script: |
             cd /home/ubuntu/algorizz-whatsapp-agent
-            git stash -u
+            git stash 
             git pull origin main
             pm2 restart 0
