@@ -1,0 +1,27 @@
+name: Deploy WhatsApp Agent
+
+on:
+  workflow_dispatch:    # Manual trigger
+  push:
+    branches:
+      - main          # Trigger on pushes to main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: SSH to Server and Deploy
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}        # e.g., your EC2 public IP
+          username: ubuntu   # e.g., ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}      # Private key stored in GitHub secrets
+          script: |
+            cd /home/ubuntu/algorizz-whatsapp-agent
+            git stash 
+            git pull origin main
+            pm2 restart 0
