@@ -18,21 +18,41 @@ PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")
 os.makedirs(PROFILE_PATH, exist_ok=True)  # ensure folder exists
 
 # --------------------- Launch WhatsApp ---------------------
+import os
+import platform
+import shutil
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+# WhatsApp profile folder
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")
+os.makedirs(PROFILE_PATH, exist_ok=True)
+
 def launch_driver():
     options = webdriver.ChromeOptions()
 
     # Use project-local profile
     options.add_argument(f"user-data-dir={PROFILE_PATH}")
 
-    # Headless & Linux-safe flags
-    options.add_argument("--headless")  # run without GUI
-    options.add_argument("--no-sandbox")  # required for EC2
-    options.add_argument("--disable-dev-shm-usage")  # avoid /dev/shm errors
-    options.add_argument("--disable-gpu")  # optional
-    options.add_argument("--remote-debugging-port=9222")  # avoid DevToolsActivePort errors
+    # Headless + Linux-safe flags (only on Linux)
+    if platform.system() != "Windows":
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--remote-debugging-port=9222")
 
-    # Explicit Chrome binary path (adjust if installed elsewhere)
-    options.binary_location = "/usr/bin/google-chrome"
+    # Auto-detect Chrome/Chromium binary
+    chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
+    if chrome_path:
+        options.binary_location = chrome_path
+    elif platform.system() == "Windows":
+        # Optional: default Windows Chrome path
+        options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    else:
+        raise Exception("No Chrome/Chromium binary found. Please install it on this machine.")
 
     # Use webdriver-manager for ChromeDriver
     service = Service(ChromeDriverManager().install())
@@ -40,6 +60,7 @@ def launch_driver():
 
     driver.get("https://web.whatsapp.com")
     return driver
+
 
 def wait_for_page_load(driver):
     print("Waiting for WhatsApp Web to load...")
