@@ -9,16 +9,24 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
-load_dotenv(override=True)
 
 # ------------------ Config ------------------
+load_dotenv(override=True)
+
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY")
 HEADERS = {
     "Content-Type": "application/json",
     "api-key": AZURE_API_KEY
 }
-PROFILE_PATH = "C:/Temp/WhatsAppProfile"
+
+# Store WhatsApp profile inside project folder
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")
+os.makedirs(PROFILE_PATH, exist_ok=True)
+print(f"Profile folder created at: {PROFILE_PATH}")
+print(f"Exists? {os.path.exists(PROFILE_PATH)}")
+
 
 # ------------------ Read Admin Name ------------------
 try:
@@ -36,13 +44,13 @@ except Exception as e:
 # ------------------ Selenium Setup ------------------
 def launch_driver():
     options = webdriver.ChromeOptions()
-    options.add_argument(f"user-data-dir={PROFILE_PATH}")
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # persistent session
     driver = webdriver.Chrome(options=options)
     driver.get("https://web.whatsapp.com")
     return driver
 
 def wait_for_whatsapp(driver):
-    print("Waiting for WhatsApp Web to load...")
+    print("⌛ Waiting for WhatsApp Web to load...")
     WebDriverWait(driver, 60).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
     )
@@ -69,7 +77,7 @@ def send_message(driver, message):
     )
     for line in message.split('\n'):
         message_box.send_keys(line)
-        message_box.send_keys(Keys.SHIFT + Keys.ENTER)
+        message_box.send_keys(Keys.SHIFT + Keys.ENTER)  # newline inside message
     message_box.send_keys(Keys.ENTER)
     print("✅ Message sent.")
     time.sleep(5)
@@ -91,11 +99,13 @@ You are an executive assistant AI summarizing a WhatsApp group conversation for 
 Read the conversation from the group "{group_name}" and summarize it into short, actionable bullet points.
 
 Your summary must include exactly three sections:
-1. **Key things done** → Brief bullet points on completed work or progress updates.
-2. **Outstanding tasks & owners** → Tasks that are pending, with the name of the person responsible.
-3. **Bottlenecks & actions you need to take** → Current challenges/blockers and the specific actions you should take.
+1. Key things done → Brief bullet points on completed work or progress updates.
+2. Outstanding tasks & owners → Tasks that are pending, with the name of the person responsible.
+3. Bottlenecks & actions you need to take → Current challenges/blockers and the specific actions you should take.
 
-Keep it concise, factual, and easy to read. Do not add extra commentary or headings beyond these three sections. Don't use bold points and don't add numeric bullet points keep it simple.
+Keep it concise, factual, and easy to read. 
+Do not add extra commentary or headings beyond these three sections. 
+Don't use bold points and don't add numeric bullet points — keep it simple.
 
 Here is the group conversation:
 
@@ -103,7 +113,6 @@ Here is the group conversation:
 
 Now write the summary.
 """
-
 
             payload = {
                 "messages": [

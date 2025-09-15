@@ -1,6 +1,7 @@
 import csv
 import json
 import time
+import os
 import platform
 from datetime import datetime
 from selenium import webdriver
@@ -8,15 +9,27 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+# --------------------- Launch WhatsApp ---------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # current project dir
+PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")
+os.makedirs(PROFILE_PATH, exist_ok=True)  # ensure folder exists
 
 # --------------------- Launch WhatsApp ---------------------
 def launch_driver():
+   
+
     options = webdriver.ChromeOptions()
-    options.add_argument("user-data-dir=C:/Temp/WhatsAppProfile")
-    driver = webdriver.Chrome(options=options)
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # use project-local profile
+
+    # ✅ webdriver-manager handles downloading & path automatically
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+
     driver.get("https://web.whatsapp.com")
     return driver
-
 def wait_for_page_load(driver):
     print("Waiting for WhatsApp Web to load...")
     WebDriverWait(driver, 60).until(

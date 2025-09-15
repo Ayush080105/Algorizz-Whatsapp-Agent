@@ -1,16 +1,21 @@
-import csv, time
+import csv, time, os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-PROFILE_PATH = "C:/Temp/WhatsAppProfile"
+# ------------------ Paths ------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # current script folder
+PROFILE_PATH = os.path.join(BASE_DIR, "whatsapp_profile")  # store profile in project
+
+# Ensure the folder exists
+os.makedirs(PROFILE_PATH, exist_ok=True)
 
 # ------------------ WhatsApp Helpers ------------------
 def launch_driver():
     options = webdriver.ChromeOptions()
-    options.add_argument(f"user-data-dir={PROFILE_PATH}")
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # store session here
     driver = webdriver.Chrome(options=options)
     driver.get("https://web.whatsapp.com")
     return driver
@@ -59,3 +64,7 @@ def send_morning_message():
         send_message(driver, morning_message)
 
     driver.quit()
+
+
+if __name__ == "__main__":
+    send_morning_message()
