@@ -5,6 +5,7 @@ import os
 import platform
 import shutil
 import tempfile
+import subprocess
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -24,62 +25,38 @@ def log(msg):
     print(f"{timestamp} {msg}")
 
 # --------------------- Launch WhatsApp ---------------------
-def launch_driver(retries=3, wait_time=5, use_temp_profile=True):
+def launch_driver(retries=3, wait_time=5):
     last_exception = None
-    os.system("pkill -f chrome")
+
     for attempt in range(1, retries + 1):
         try:
-            log(f"🔹 Launch attempt {attempt}...")
+            print(f"[INFO] Launch attempt {attempt}...")
+
+            # Kill any leftover Chrome processes
+            subprocess.run("pkill -f chrome", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
             options = webdriver.ChromeOptions()
 
-            # HEADLESS + LINUX FLAGS
+            # Headless & Linux flags
             if platform.system() != "Windows":
                 options.add_argument("--headless=new")
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
                 options.add_argument("--disable-gpu")
                 options.add_argument("--remote-debugging-port=9222")
-                options.add_argument("--disable-software-rasterizer")
-                options.add_argument("--disable-extensions")
-                options.add_argument("--disable-background-networking")
 
-            # User profile (temporary for each session)
-            if use_temp_profile:
-                temp_profile = tempfile.mkdtemp(prefix="whatsapp_")
-                options.add_argument(f"user-data-dir={temp_profile}")
-                log(f"✅ Using temporary profile directory: {temp_profile}")
-            else:
-                profile_dir = os.path.join(BASE_DIR, "whatsapp_profile")
-                os.makedirs(profile_dir, exist_ok=True)
-                options.add_argument(f"user-data-dir={profile_dir}")
-                log(f"✅ Using persistent profile directory: {profile_dir}")
+            # Always use unique temp profile
+            temp_profile = tempfile.mkdtemp(prefix="whatsapp_")
+            options.add_argument(f"--user-data-dir={temp_profile}")
 
-            # Chrome binary detection
-            chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
-            if chrome_path:
-                options.binary_location = chrome_path
-                log(f"✅ Chrome binary detected at: {chrome_path}")
-            elif platform.system() == "Windows":
-                options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-                log(f"✅ Using default Windows Chrome path: {options.binary_location}")
-            else:
-                raise Exception("❌ No Chrome/Chromium binary found!")
-
-            # Kill existing Chrome processes (optional)
-            os.system("pkill -f chrome" if platform.system() != "Windows" else "taskkill /f /im chrome.exe")
-
-            # Launch driver
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=options)
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
             driver.get("https://web.whatsapp.com")
-            log("✅ Chrome launched successfully!")
+            print("[INFO] Chrome launched successfully!")
             return driver
 
         except Exception as e:
             last_exception = e
-            log(f"⚠️ Launch attempt {attempt} failed: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[WARN] Launch attempt {attempt} failed: {e}")
             time.sleep(wait_time)
 
     raise Exception(f"🚨 Failed to launch Chrome after {retries} attempts. Last error: {last_exception}")
