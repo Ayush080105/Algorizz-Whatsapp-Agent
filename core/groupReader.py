@@ -45,7 +45,7 @@ def cleanup_chrome_processes():
         log(f"⚠️ Cleanup warning: {e}")
 
 # --------------------- Launch WhatsApp ---------------------
-def launch_driver(retries=3, wait_time=5, headless=True):
+def launch_driver(retries=3, wait_time=5, headless=False):  # Set to False to see the browser
     last_exception = None
 
     for attempt in range(1, retries + 1):
@@ -60,7 +60,7 @@ def launch_driver(retries=3, wait_time=5, headless=True):
             # Add random port to avoid conflicts
             options.add_argument(f"--remote-debugging-port={random.randint(9222, 9999)}")
             
-            # Linux / EC2 safe flags
+            # Linux/EC2 safe flags - disable headless for QR code scanning
             if platform.system() != "Windows" and headless:
                 options.add_argument("--headless=new")
                 options.add_argument("--no-sandbox")
@@ -69,6 +69,9 @@ def launch_driver(retries=3, wait_time=5, headless=True):
                 options.add_argument("--disable-software-rasterizer")
                 options.add_argument("--disable-extensions")
                 options.add_argument("--disable-background-networking")
+            else:
+                # For non-headless, set a larger window size for better visibility
+                options.add_argument("--window-size=1200,800")
             
             # Use unique temp profile for each attempt
             temp_profile = tempfile.mkdtemp(prefix=f"whatsapp_{attempt}_")
@@ -88,9 +91,6 @@ def launch_driver(retries=3, wait_time=5, headless=True):
             
             # Initialize service with explicit path
             service = Service(ChromeDriverManager().install())
-            
-            # Set longer timeout for service
-            service.start()
             
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(60)
@@ -113,52 +113,75 @@ def launch_driver(retries=3, wait_time=5, headless=True):
 
     raise Exception(f"🚨 Failed to launch Chrome after {retries} attempts. Last error: {last_exception}")
 
-# --------------------- Wait for WhatsApp ---------------------
-def wait_for_page_load(driver):
+# --------------------- Wait for WhatsApp & QR Code ---------------------
+def wait_for_whatsapp_ready(driver):
     log("Waiting for WhatsApp Web to load...")
+    
+    # Wait for either QR code or chat interface
     try:
-        # Wait for either the QR code or the chat interface
-        WebDriverWait(driver, 90).until(
+        WebDriverWait(driver, 30).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "canvas[aria-label='Scan me!']") or 
                      d.find_elements(By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]")
         )
-        log("✅ WhatsApp Web loaded.")
+        
+        # Check if QR code is present (need to scan)
+        qr_elements = driver.find_elements(By.CSS_SELECTOR, "canvas[aria-label='Scan me!']")
+        if qr_elements:
+            log("🔐 QR Code detected. Please scan with your WhatsApp mobile app.")
+            log("You have 60 seconds to scan the QR code...")
+            
+            # Wait for QR code to disappear (indicating successful scan)
+            WebDriverWait(driver, 60).until(
+                EC.invisibility_of_element_located((By.CSS_SELECTOR, "canvas[aria-label='Scan me!']"))
+            )
+            log("✅ QR Code scanned successfully!")
+        
+        # Wait for the chat interface to be fully loaded
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
+        )
+        log("✅ WhatsApp Web is ready!")
+        
     except Exception as e:
-        log(f"❌ Page load failed: {e}")
+        log(f"❌ Failed to load WhatsApp: {e}")
         raise
 
 # --------------------- Open Group ---------------------
 def search_and_open_group(driver, group_name):
     log(f"🔍 Searching for group: {group_name}")
     try:
-        driver.execute_script("window.scrollTo(0, 0);")
+        # Find and use the search box
         search_box = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.XPATH, '//div[@role="textbox"][@contenteditable="true"][@data-tab="3"]'))
+            EC.element_to_be_clickable((By.XPATH, '//div[@contenteditable="true"][@data-tab="3"]'))
         )
+        
+        # Clear search box
         search_box.click()
         time.sleep(1)
         search_box.send_keys(Keys.CONTROL + 'a')
         time.sleep(0.5)
         search_box.send_keys(Keys.BACKSPACE)
         time.sleep(1)
+        
+        # Type group name
         search_box.send_keys(group_name)
         time.sleep(3)
         
         # Try to click on the group from search results
-        group_element = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, f'//span[@title="{group_name}"]'))
-        )
-        group_element.click()
-        time.sleep(3)
-        
-    except Exception as e:
-        log(f"❌ Failed to find group {group_name}: {e}")
-        # Fallback: press enter in search box
         try:
-            search_box.send_keys(Keys.ENTER)
+            group_element = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, f'//span[@title="{group_name}"]'))
+            )
+            group_element.click()
             time.sleep(3)
         except:
-            raise
+            # Fallback: press enter in search box
+            search_box.send_keys(Keys.ENTER)
+            time.sleep(3)
+            
+    except Exception as e:
+        log(f"❌ Failed to find group {group_name}: {e}")
+        raise
 
 # --------------------- Read Today's Messages ---------------------
 def read_todays_messages(driver, count=100):
@@ -192,7 +215,12 @@ def read_todays_messages(driver, count=100):
 def update_csv(csv_path):
     if not os.path.exists(csv_path):
         log(f"❌ CSV file not found: {csv_path}")
-        return
+        # Create a sample CSV if it doesn't exist
+        with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.DictWriter(file, fieldnames=['groupName', 'Conversation'])
+            writer.writeheader()
+            writer.writerow({'groupName': 'Example Group', 'Conversation': '[]'})
+        log(f"📝 Created sample CSV file: {csv_path}")
 
     updated_rows = []
     log(f"📂 Loading CSV: {csv_path}")
@@ -207,12 +235,16 @@ def update_csv(csv_path):
         return
 
     driver = None
+    temp_profile = None
     try:
-        driver, temp_profile = launch_driver(headless=False)  # Set to False for debugging
-        wait_for_page_load(driver)
+        # Launch browser in non-headless mode to allow QR scanning
+        driver, temp_profile = launch_driver(headless=False)
         
-        log("Please scan the QR code if needed, then press Enter to continue...")
-        input()  # Wait for user to scan QR code
+        # Wait for WhatsApp to load and handle QR code if needed
+        wait_for_whatsapp_ready(driver)
+        
+        # Additional wait to ensure everything is loaded
+        time.sleep(3)
 
         for row in rows:
             group_name = row['groupName']
@@ -234,6 +266,11 @@ def update_csv(csv_path):
     finally:
         if driver:
             driver.quit()
+        if temp_profile and os.path.exists(temp_profile):
+            try:
+                shutil.rmtree(temp_profile, ignore_errors=True)
+            except:
+                pass
         cleanup_chrome_processes()
 
     # Write updated CSV
@@ -244,7 +281,7 @@ def update_csv(csv_path):
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(updated_rows)
-        log("✅ CSV replaced with today's messages!")
+        log("✅ CSV updated successfully with today's messages!")
     except Exception as e:
         log(f"❌ Error writing CSV: {e}")
 
