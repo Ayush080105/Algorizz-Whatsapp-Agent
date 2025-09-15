@@ -26,11 +26,7 @@ def launch_driver(retries=3, wait_time=5):
         try:
             options = webdriver.ChromeOptions()
 
-            # Use a unique temporary profile folder per session (avoids profile-in-use errors)
-            profile_dir = tempfile.mkdtemp(prefix="whatsapp_profile_")
-            options.add_argument(f"user-data-dir={profile_dir}")
-
-            # Linux-safe headless flags
+            # HEADLESS + LINUX FLAGS
             if platform.system() != "Windows":
                 options.add_argument("--headless=new")
                 options.add_argument("--no-sandbox")
@@ -38,8 +34,10 @@ def launch_driver(retries=3, wait_time=5):
                 options.add_argument("--disable-gpu")
                 options.add_argument("--remote-debugging-port=9222")
                 options.add_argument("--disable-software-rasterizer")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-background-networking")
 
-            # Auto-detect Chrome/Chromium binary
+            # Auto-detect Chrome binary
             chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
             if chrome_path:
                 options.binary_location = chrome_path
