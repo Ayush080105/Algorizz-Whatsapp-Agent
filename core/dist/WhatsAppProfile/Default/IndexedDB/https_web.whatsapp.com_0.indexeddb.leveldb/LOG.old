@@ -1,0 +1,24 @@
+2025/09/16-20:37:31.924 5b4c Reusing MANIFEST C:\Users\AYUSH\Desktop\wpagentapp\core\dist\WhatsAppProfile\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/09/16-20:37:31.925 5b4c Recovering log #88
+2025/09/16-20:37:31.930 5b4c Reusing old log C:\Users\AYUSH\Desktop\wpagentapp\core\dist\WhatsAppProfile\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000088.log 
+2025/09/16-20:37:31.930 5b4c Delete type=2 #90
+2025/09/16-20:37:33.735 6284 Compacting 1@1 + 2@2 files
+2025/09/16-20:37:33.769 6284 Generated table #91@1: 37191 keys, 2196464 bytes
+2025/09/16-20:37:33.791 6284 Generated table #92@1: 15502 keys, 1391369 bytes
+2025/09/16-20:37:33.791 6284 Compacted 1@1 + 2@2 files => 3587833 bytes
+2025/09/16-20:37:33.791 6284 compacted to: files[ 0 0 2 0 0 0 0 ]
+2025/09/16-20:37:33.792 6284 Delete type=2 #86
+2025/09/16-20:37:33.792 6284 Delete type=2 #87
+2025/09/16-20:37:33.792 6284 Delete type=2 #89
+2025/09/16-20:37:34.437 2838 Level-0 table #94: started
+2025/09/16-20:37:34.449 2838 Level-0 table #94: 126200 bytes OK
+2025/09/16-20:37:34.450 2838 Delete type=0 #88
+2025/09/16-20:37:34.451 2838 Manual compaction at level-0 from '\x00$\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00%\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/09/16-20:37:35.345 6284 Compacting 1@1 + 2@2 files
+2025/09/16-20:37:35.379 6284 Generated table #95@1: 34615 keys, 2192938 bytes
+2025/09/16-20:37:35.401 6284 Generated table #96@1: 15465 keys, 1325471 bytes
+2025/09/16-20:37:35.402 6284 Compacted 1@1 + 2@2 files => 3518409 bytes
+2025/09/16-20:37:35.402 6284 compacted to: files[ 0 0 2 0 0 0 0 ]
+2025/09/16-20:37:35.403 6284 Delete type=2 #91
+2025/09/16-20:37:35.403 6284 Delete type=2 #92
+2025/09/16-20:37:35.403 6284 Delete type=2 #94

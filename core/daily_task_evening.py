@@ -1,8 +1,4 @@
-import csv
-import json
-import time
-import os
-import requests
+import csv, json, time, requests, os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -10,17 +6,17 @@ from selenium.webdriver.support import expected_conditions as EC
 import groupReader
 from dotenv import load_dotenv
 
-# --------------------- Load Environment ---------------------
+# ------------------ Paths ------------------
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_PATH, "group_convo.csv")
+ADMIN_FILE = os.path.join(BASE_PATH, "admin.txt")
+
+# ------------------ Env ------------------
 load_dotenv(override=True)
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY")
 HEADERS = {"Content-Type": "application/json", "api-key": AZURE_API_KEY}
 
-# --------------------- Logging ---------------------
-from datetime import datetime
-def log(msg):
-    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    print(f"{timestamp} {msg}")
 
 # --------------------- Use Azure LLM ---------------------
 def generate_evening_updates_llm(conversation, group_name):
@@ -28,7 +24,7 @@ def generate_evening_updates_llm(conversation, group_name):
         return []
 
     try:
-        with open("admin.txt", "r", encoding="utf-8") as f:
+        with open(ADMIN_FILE, "r", encoding="utf-8") as f:
             admin_name = f.read().strip()
     except FileNotFoundError:
         admin_name = ""
@@ -58,46 +54,54 @@ Rules:
     }
 
     try:
-        response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=body, timeout=30)
+        response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=body)
         response.raise_for_status()
         raw_reply = response.json()["choices"][0]["message"]["content"].strip()
         return [line for line in raw_reply.split("\n") if line.strip()]
     except Exception as e:
-        log(f"❌ LLM generation failed for group {group_name}: {e}")
+        print(f"❌ LLM generation failed: {e}")
         return []
 
-# --------------------- Send Evening Messages ---------------------
+
+# --------------------- Send Evening Message ---------------------
 def send_evening_message(driver, group_name, messages):
     try:
+        # Open the group
         groupReader.search_and_open_group(driver, group_name)
-        time.sleep(2)
-
+        
+        # Wait until input box is clickable (safer than presence)
+        input_box = WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
+        )
+        input_box.click()
+        
+        # Send all messages
         for msg in messages:
-            input_box = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, '//div[@role="textbox"][@contenteditable="true"][@data-tab="10"]')
-                )
-            )
-            input_box.click()
-            input_box.send_keys(msg)
+            for line in msg.split('\n'):
+                input_box.send_keys(line)
+                input_box.send_keys(Keys.SHIFT + Keys.ENTER)
             input_box.send_keys(Keys.ENTER)
-            time.sleep(1)
-
-        log(f"✅ Evening messages sent to {group_name}")
+            time.sleep(1)  # optional, avoid flooding
+        
+        print(f"✅ Evening messages sent to {group_name}")
     except Exception as e:
-        log(f"❌ Failed to send evening messages to {group_name}: {e}")
+        print(f"❌ Failed to send evening message to {group_name}: {e}")
+
+
+
 
 # --------------------- Main Wrapper ---------------------
-def send_evening_messages(csv_path="group_convo.csv"):
-    log("📌 Updating CSV with today's messages...")
-    groupReader.update_csv(csv_path)
+def send_evening_messages(csv_path=CSV_PATH):
+    groupReader.update_csv()
+
+    if not os.path.exists(csv_path):
+        print("⚠️ No group_convo.csv found, skipping evening messages.")
+        return
 
     with open(csv_path, mode="r", newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
 
-    log("🚀 Launching WhatsApp Web with temporary profile...")
-    # Use temporary profile to avoid session conflicts
-    driver = groupReader.launch_driver(use_temp_profile=True)
+    driver = groupReader.launch_driver()
     groupReader.wait_for_page_load(driver)
 
     for row in rows:
@@ -105,18 +109,10 @@ def send_evening_messages(csv_path="group_convo.csv"):
         try:
             conversation = json.loads(row["Conversation"]) if row["Conversation"].strip() else []
         except json.JSONDecodeError:
-            log(f"❌ JSON decode failed for group {group_name}, skipping conversation.")
             conversation = []
 
         evening_msgs = generate_evening_updates_llm(conversation, group_name)
         if evening_msgs:
             send_evening_message(driver, group_name, evening_msgs)
-        else:
-            log(f"ℹ️ No evening messages generated for {group_name}")
 
     driver.quit()
-    log("✅ Finished sending evening messages to all groups.")
-
-# --------------------- Run ---------------------
-if __name__ == "__main__":
-    send_evening_messages()

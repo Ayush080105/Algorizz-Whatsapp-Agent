@@ -1,214 +1,134 @@
+import os
+import sys
+import time
 import csv
 import json
-import time
-import os
 import platform
-import tempfile
-import subprocess
-import random
-import shutil
-import sys
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
-from webdriver_manager.chrome import ChromeDriverManager
 
 # --------------------- Paths ---------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(BASE_DIR, "group_convo.csv")
-
-# --------------------- Logging ---------------------
-def log(msg):
-    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    print(f"{timestamp} {msg}")
-
-# --------------------- Cleanup Chrome Processes ---------------------
-def cleanup_chrome_processes():
-    """Kill all Chrome processes to ensure clean state"""
-    try:
-        if platform.system() == "Windows":
-            subprocess.run(["taskkill", "/f", "/im", "chrome.exe"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["taskkill", "/f", "/im", "chromedriver.exe"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.run("pkill -f chrome", shell=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run("pkill -f chromedriver", shell=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2)
-        log("✅ Chrome processes cleaned up")
-    except Exception as e:
-        log(f"⚠️ Cleanup warning: {e}")
+BASE_PATH = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+PROFILE_PATH = os.path.join(BASE_PATH, "WhatsAppProfile")
+CSV_PATH = os.path.join(BASE_PATH, "group_convo.csv")
+os.makedirs(PROFILE_PATH, exist_ok=True)
 
 # --------------------- Launch WhatsApp ---------------------
-def launch_driver(retries=3, wait_time=5):
-    last_exception = None
+def launch_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")  # persistent profile
+    driver = webdriver.Chrome(options=options)
+    driver.get("https://web.whatsapp.com")
+    return driver
 
-    for attempt in range(1, retries + 1):
+def wait_for_page_load(driver, timeout=60):
+    print("Waiting for WhatsApp Web to load...")
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
+    )
+    print("✅ WhatsApp Web loaded.")
+
+# --------------------- Open Group ---------------------
+def search_and_open_group(driver, group_name):
+    time.sleep(1)
+    driver.execute_script("window.scrollTo(0, 0);")
+    search_box = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.XPATH, '//div[@role="textbox"][@contenteditable="true"][@data-tab="3"]'))
+    )
+    search_box.click()
+    time.sleep(0.5)
+    search_box.send_keys(Keys.CONTROL, 'a')
+    search_box.send_keys(Keys.BACKSPACE)
+    time.sleep(0.5)
+    search_box.send_keys(group_name)
+    time.sleep(2)
+    search_box.send_keys(Keys.ENTER)
+    time.sleep(2)
+
+# --------------------- Read Today's Messages ---------------------
+def read_todays_messages(driver, count=100):
+    messages = driver.find_elements(By.XPATH, '//div[contains(@class,"message-in") or contains(@class,"message-out")]')
+    messages = messages[-count:]
+    extracted = []
+
+    if platform.system() == "Windows":
+        today = datetime.now().strftime("%#m/%#d/%Y")
+    else:
+        today = datetime.now().strftime("%-m/%-d/%Y")
+
+    for msg in messages:
         try:
-            log(f"[INFO] Launch attempt {attempt}...")
-
-            cleanup_chrome_processes()
-
-            options = Options()
-            options.add_argument(f"--remote-debugging-port={random.randint(9222, 9999)}")
-
-            # 🚨 Force visible browser (no headless at all)
-            log("[INFO] Forcing visible browser")
-            options.add_argument("--window-size=1200,800")
-            options.add_argument("--start-maximized")
-
-            # Common options
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--disable-software-rasterizer")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-background-networking")
-            options.add_argument("--disable-features=VizDisplayCompositor")
-            options.add_argument("--disable-background-timer-throttling")
-            options.add_argument("--disable-backgrounding-occluded-windows")
-            options.add_argument("--disable-renderer-backgrounding")
-            options.add_argument("--disable-web-security")
-            options.add_argument("--no-default-browser-check")
-            options.add_argument("--no-first-run")
-
-            # Use unique temp profile
-            temp_profile = tempfile.mkdtemp(prefix=f"whatsapp_{attempt}_")
-            options.add_argument(f"--user-data-dir={temp_profile}")
-
-            options.page_load_strategy = 'normal'
-
-            service = Service(ChromeDriverManager().install())
-
-            driver = webdriver.Chrome(service=service, options=options)
-            driver.set_page_load_timeout(60)
-            driver.implicitly_wait(10)
-
-            driver.get("https://web.whatsapp.com")
-            log("[INFO] Chrome launched successfully!")
-
-            # Screenshot checkpoint
-            driver.save_screenshot("step1_loaded.png")
-            log("📸 Screenshot saved: step1_loaded.png")
-
-            return driver, temp_profile
-
-        except Exception as e:
-            last_exception = e
-            log(f"[WARN] Launch attempt {attempt} failed: {e}")
-            if 'temp_profile' in locals():
-                try:
-                    shutil.rmtree(temp_profile, ignore_errors=True)
-                except:
-                    pass
-            time.sleep(wait_time)
-
-    raise Exception(f"🚨 Failed to launch Chrome after {retries} attempts. Last error: {last_exception}")
-
-# --------------------- Wait for WhatsApp & QR Code ---------------------
-def wait_for_whatsapp_ready(driver):
-    log("Waiting for WhatsApp Web to load...")
-
-    try:
-        WebDriverWait(driver, 60).until(
-            lambda d: d.find_elements(By.CSS_SELECTOR, "canvas[aria-label='Scan me!']") or
-                     d.find_elements(By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]")
-        )
-
-        qr_elements = driver.find_elements(By.CSS_SELECTOR, "canvas[aria-label='Scan me!']")
-        if qr_elements:
-            log("🔐 QR Code detected. Please scan with your mobile app.")
-            try:
-                WebDriverWait(driver, 60).until(
-                    EC.invisibility_of_element_located((By.CSS_SELECTOR, "canvas[aria-label='Scan me!']"))
-                )
-                log("✅ QR Code scanned successfully!")
-            except:
-                log("⚠️ QR code not scanned within timeout. Continuing anyway...")
-
-        WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'][data-tab]"))
-        )
-        log(f"✅ WhatsApp Web is ready! Page title: {driver.title}")
-
-    except Exception as e:
-        log(f"❌ Failed to load WhatsApp: {e}")
-        try:
-            driver.save_screenshot("whatsapp_error.png")
-            log("📸 Screenshot saved as whatsapp_error.png")
+            sender_elem = msg.find_element(By.XPATH, './/div[@data-pre-plain-text]')
+            sender_text = sender_elem.get_attribute("data-pre-plain-text")
+            if today not in sender_text:
+                continue
+            sender = sender_text.split("] ")[-1].strip().rstrip(":")
+            message_elem = msg.find_element(By.XPATH, './/span[contains(@class,"selectable-text")]')
+            message = message_elem.text.strip()
+            if message:
+                extracted.append({"sender": sender, "message": message})
         except:
-            pass
-        raise
+            continue
+    return extracted
+
+# --------------------- Send Message ---------------------
+def send_message(driver, group_name, messages):
+    search_and_open_group(driver, group_name)
+    input_box = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
+    )
+    input_box.click()
+    for msg in messages:
+        for line in msg.split('\n'):
+            input_box.send_keys(line)
+            input_box.send_keys(Keys.SHIFT + Keys.ENTER)
+        input_box.send_keys(Keys.ENTER)
+        time.sleep(1)
+    print(f"✅ Message sent to {group_name}")
 
 # --------------------- Update CSV ---------------------
-def update_csv(csv_path):
-    if not os.path.exists(csv_path):
-        log(f"❌ CSV file not found: {csv_path}")
-        with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=['groupName', 'Conversation'])
-            writer.writeheader()
-            writer.writerow({'groupName': 'Example Group', 'Conversation': '[]'})
-        log(f"📝 Created sample CSV file: {csv_path}")
-
+def update_csv():
     updated_rows = []
-    log(f"📂 Loading CSV: {csv_path}")
 
-    try:
-        with open(csv_path, mode='r', newline='', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            rows = list(reader)
-        log(f"📊 Loaded {len(rows)} groups from CSV")
-    except Exception as e:
-        log(f"❌ Error reading CSV: {e}")
+    # Ensure CSV exists
+    if not os.path.exists(CSV_PATH):
+        with open(CSV_PATH, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["groupName", "Conversation"])
+            writer.writeheader()
         return
 
-    driver = None
-    temp_profile = None
-    try:
-        driver, temp_profile = launch_driver()
-        wait_for_whatsapp_ready(driver)
+    # Read existing groups
+    with open(CSV_PATH, mode='r', newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        rows = list(reader)
 
-        log("👉 Browser will stay open. Press ENTER here in terminal to continue...")
-        input()  # Keep browser open until you press Enter
+    driver = launch_driver()
+    wait_for_page_load(driver)
 
-        # TODO: Add group processing logic once login works
-        updated_rows = rows
+    for row in rows:
+        group_name = row['groupName']
+        print(f"\n📌 Fetching TODAY's messages from group: {group_name}")
+        todays_msgs = []
+        try:
+            search_and_open_group(driver, group_name)
+            time.sleep(2)
+            todays_msgs = read_todays_messages(driver)
+        except Exception as e:
+            print(f"❌ Failed for group {group_name}: {e}")
 
-    except Exception as e:
-        log(f"❌ Fatal error: {e}")
-    finally:
-        # ⚠️ Do NOT quit driver immediately so you can debug visually
-        if temp_profile and os.path.exists(temp_profile):
-            try:
-                shutil.rmtree(temp_profile, ignore_errors=True)
-            except:
-                pass
-        # cleanup_chrome_processes()  # Disabled during debugging
+        row['Conversation'] = json.dumps(todays_msgs, ensure_ascii=False)
+        updated_rows.append(row)
 
-    # Write updated CSV
-    try:
-        log("💾 Writing updated CSV...")
-        with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
-            fieldnames = ['groupName', 'Conversation']
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(updated_rows)
-        log("✅ CSV updated successfully!")
-    except Exception as e:
-        log(f"❌ Error writing CSV: {e}")
+    driver.quit()
 
-# --------------------- Main Execution ---------------------
-if __name__ == "__main__":
-    try:
-        update_csv(CSV_PATH)
-    except Exception as e:
-        log(f"❌ Script failed: {e}")
-        cleanup_chrome_processes()
+    # Replace CSV completely
+    with open(CSV_PATH, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=['groupName', 'Conversation'])
+        writer.writeheader()
+        writer.writerows(updated_rows)
+
+    print("\n✅ CSV replaced with only today's messages!")

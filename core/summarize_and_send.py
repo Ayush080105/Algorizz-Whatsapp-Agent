@@ -1,87 +1,118 @@
 import csv
 import json
 import os
+import sys
 import time
 import requests
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import groupReader
 from dotenv import load_dotenv
-from datetime import datetime
 
-# ------------------ Load Environment ------------------
 load_dotenv(override=True)
+
+# ------------------ Config ------------------
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY")
-HEADERS = {"Content-Type": "application/json", "api-key": AZURE_API_KEY}
+HEADERS = {
+    "Content-Type": "application/json",
+    "api-key": AZURE_API_KEY
+}
+BASE_PATH = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+PROFILE_PATH = os.path.join(BASE_PATH, "WhatsAppProfile")
+CSV_PATH = os.path.join(BASE_PATH, "group_convo.csv")
 
-# ------------------ Logging ------------------
-def log(msg):
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+# ------------------ Resource Path Helper ------------------
+def resource_path(relative_path):
+    base_path = os.path.join(os.environ.get("USERPROFILE", os.getcwd()), "WhatsAppProfileApp")
+    os.makedirs(base_path, exist_ok=True)
+    return os.path.join(base_path, relative_path)
 
 # ------------------ Read Admin Name ------------------
+ADMIN_FILE = os.path.join(BASE_PATH, "admin.txt")
+
 try:
-    with open("admin.txt", "r", encoding="utf-8") as f:
+    with open(ADMIN_FILE, "r", encoding="utf-8") as f:
         ADMIN_NAME = f.read().strip()
         if not ADMIN_NAME:
             raise ValueError("admin.txt is empty.")
 except FileNotFoundError:
-    log("❌ admin.txt not found. Please create the file and add the admin name.")
-    exit(1)
+    print("❌ admin.txt not found. Please create the file and add the admin name.")
+    sys.exit(1)
 except Exception as e:
-    log(f"❌ Error reading admin.txt: {e}")
-    exit(1)
+    print(f"❌ Error reading admin.txt: {e}")
+    sys.exit(1)
 
-# ------------------ WhatsApp Helpers ------------------
+# ------------------ Selenium Setup ------------------
+def launch_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument(f"user-data-dir={PROFILE_PATH}")
+    driver = webdriver.Chrome(options=options)
+    driver.get("https://web.whatsapp.com")
+    return driver
+
+def wait_for_whatsapp(driver):
+    print("Waiting for WhatsApp Web to load...")
+    WebDriverWait(driver, 60).until(
+        EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="3"]'))
+    )
+    print("✅ WhatsApp loaded.")
+
+# ------------------ Chat Helpers ------------------
 def search_and_open_chat(driver, contact_name):
-    try:
-        groupReader.search_and_open_group(driver, contact_name)
-    except Exception as e:
-        log(f"❌ Failed to open chat {contact_name}: {e}")
+    # Wait for search box to be clickable
+    search_box = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, '//div[@contenteditable="true"][@data-tab="3"]'))
+    )
+    search_box.click()
+    time.sleep(0.5)
+    
+    # Clear existing text
+    search_box.send_keys(Keys.CONTROL + "a")
+    search_box.send_keys(Keys.BACKSPACE)
+    time.sleep(0.3)
+    
+    # Type contact/admin name and open chat
+    search_box.send_keys(contact_name)
+    time.sleep(2)
+    search_box.send_keys(Keys.ENTER)
+    time.sleep(2)
 
 def send_message(driver, message):
-    try:
-        message_box = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
-        )
-        for line in message.split('\n'):
-            message_box.send_keys(line)
-            message_box.send_keys(Keys.SHIFT + Keys.ENTER)
-        message_box.send_keys(Keys.ENTER)
-        log("✅ Message sent.")
-        time.sleep(2)
-    except Exception as e:
-        log(f"❌ Failed to send message: {e}")
+    message_box = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
+    )
+    message_box.click()
+    time.sleep(0.3)
+    
+    # Type message line by line
+    for line in message.split('\n'):
+        message_box.send_keys(line)
+        message_box.send_keys(Keys.SHIFT + Keys.ENTER)
+    message_box.send_keys(Keys.ENTER)
+    print("✅ Message sent.")
+    time.sleep(2)
 
 # ------------------ Summarize & Send ------------------
-def summarize_conversations_and_send(csv_path="group_convo.csv"):
-    # Update CSV with today's messages
-    log("📌 Updating CSV with today's messages...")
-    groupReader.update_csv(csv_path)
+def summarize_conversations_and_send():
+    driver = launch_driver()
+    wait_for_whatsapp(driver)
 
-    with open(csv_path, "r", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    csv_file = CSV_PATH
+    if not os.path.exists(csv_file):
+        print("⚠️ group_convo.csv not found. Exiting.")
+        driver.quit()
+        return
 
-    log("🚀 Launching WhatsApp Web with temporary profile...")
-    driver = groupReader.launch_driver(use_temp_profile=True)
-    groupReader.wait_for_page_load(driver)
+    with open(csv_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            group_name = row['groupName']
+            chat = row['Conversation']
 
-    for row in rows:
-        group_name = row['groupName']
-        try:
-            chat = json.loads(row['Conversation']) if row['Conversation'].strip() else []
-        except json.JSONDecodeError:
-            log(f"⚠️ Invalid JSON for group {group_name}, skipping.")
-            continue
-
-        if not chat:
-            log(f"ℹ️ No messages in {group_name}, skipping summary.")
-            continue
-
-        convo_text = "\n".join([f"{msg['sender']}: {msg['message']}" for msg in chat])
-        prompt_template = f"""
+            prompt_template = f"""
 You are an executive assistant AI summarizing a WhatsApp group conversation for the admin.
 
 Read the conversation from the group "{group_name}" and summarize it into short, actionable bullet points.
@@ -91,38 +122,35 @@ Your summary must include exactly three sections:
 2. Outstanding tasks & owners → Tasks that are pending, with the name of the person responsible.
 3. Bottlenecks & actions you need to take → Current challenges/blockers and the specific actions you should take.
 
-Keep it concise, factual, and easy to read. Do not add extra commentary or headings beyond these three sections.
-Do not use bold or numbered points — keep it simple.
+Keep it concise, factual, and easy to read. Do not add extra commentary or headings beyond these three sections. Don't use bold points and don't add numeric bullet points keep it simple.
 
 Here is the group conversation:
 
-{convo_text}
+{chat}
 
 Now write the summary.
 """
-        payload = {
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt_template}
-            ],
-            "temperature": 0.7
-        }
 
-        try:
-            response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=payload, timeout=30)
-            response.raise_for_status()
-            summary = response.json()['choices'][0]['message']['content'].strip()
-        except Exception as e:
-            log(f"❌ Failed to generate summary for {group_name}: {e}")
-            continue
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt_template}
+                ],
+                "temperature": 0.7
+            }
 
-        log(f"\nSummary for group {group_name}:\n{'-'*50}\n{summary}")
-        search_and_open_chat(driver, ADMIN_NAME)
-        send_message(driver, f"*Update from group: {group_name}*\n\n{summary}")
+            response = requests.post(AZURE_OPENAI_ENDPOINT, headers=HEADERS, json=payload)
+
+            if response.status_code == 200:
+                summary = response.json()['choices'][0]['message']['content']
+                print(f"\nSummary for group: {group_name}\n{'-'*50}")
+                print(summary)
+
+                # Send summary to admin
+                search_and_open_chat(driver, ADMIN_NAME)
+                send_message(driver, f"*Update from group: {group_name}*\n\n{summary}")
+            else:
+                print(f"\n❌ Failed to summarize {group_name}. Status code: {response.status_code}")
+                print(response.text)
 
     driver.quit()
-    log("✅ Finished sending all group summaries.")
-
-# ------------------ Run ------------------
-if __name__ == "__main__":
-    summarize_conversations_and_send()

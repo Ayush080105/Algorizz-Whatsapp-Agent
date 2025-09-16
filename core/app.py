@@ -110,3 +110,13 @@ with col4:
             st.success("✅ Summary sent to Admin!")
         except Exception as e:
             st.error(f"❌ Failed: {e}")
+
+
+
+
+
+
+
+
+
+
